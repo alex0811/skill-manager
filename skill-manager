@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SKILLS_DIR="$HOME/.claude/skills"
+DISABLED_DIR="$HOME/.claude/skills-disabled"
+
+usage() {
+  printf 'Usage:\n'
+  printf '  %s list\n' "$0"
+  printf '  %s select\n' "$0"
+  printf '  %s enable <skill-name>\n' "$0"
+  printf '  %s disable <skill-name>\n' "$0"
+}
+
+fail() {
+  printf 'skill-manager: %s\n' "$1" >&2
+  exit 1
+}
+
+validate_skill_name() {
+  local name=$1
+
+  [[ -n "$name" ]] || fail 'skill name is required'
+  [[ "$name" != *'/'* ]] || fail 'skill name must not contain /'
+  [[ "$name" != '.' && "$name" != '..' ]] || fail 'invalid skill name'
+}
+
+list_skill_names() {
+  local dir=$1
+
+  if [[ -d "$dir" ]]; then
+    find "$dir" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -exec basename {} \; | sort
+  fi
+}
+
+print_section() {
+  local title=$1
+  local dir=$2
+
+  printf '%s:\n' "$title"
+  list_skill_names "$dir" | while IFS= read -r name; do
+    printf '  %s\n' "$name"
+  done
+}
+
+move_skill() {
+  local name=$1
+  local source_dir=$2
+  local target_dir=$3
+  local source=$source_dir/$name
+  local target=$target_dir/$name
+
+  validate_skill_name "$name"
+  [[ -d "$source" || -L "$source" ]] || fail "skill not found: $name"
+  [[ ! -e "$target" && ! -L "$target" ]] || fail "target already exists: $target"
+
+  mkdir -p "$target_dir"
+  mv "$source" "$target"
+}
+
+contains_name() {
+  local needle=$1
+  shift
+  local item
+
+  for item in "$@"; do
+    [[ "$item" == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+load_skill_state() {
+  local name row original selected
+  local enabled_names=()
+  local state_rows=()
+
+  skill_names=()
+  original_states=()
+  selected_states=()
+
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    enabled_names+=("$name")
+    state_rows+=("$name"$'\t''1'$'\t''1')
+  done < <(list_skill_names "$SKILLS_DIR")
+
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    if [[ ${#enabled_names[@]} -gt 0 ]] && contains_name "$name" "${enabled_names[@]}"; then
+      fail "skill exists in both enabled and disabled directories: $name"
+    fi
+    state_rows+=("$name"$'\t''0'$'\t''0')
+  done < <(list_skill_names "$DISABLED_DIR")
+
+  if [[ ${#state_rows[@]} -eq 0 ]]; then
+    return
+  fi
+
+  while IFS=$'\t' read -r name original selected; do
+    skill_names+=("$name")
+    original_states+=("$original")
+    selected_states+=("$selected")
+  done < <(printf '%s\n' "${state_rows[@]}" | sort)
+}
+
+render_select_screen() {
+  local cursor=$1
+  local i name mark pointer state name_width
+
+  name_width=38
+  printf '\033[H\033[2J'
+  printf 'Configure skill availability\n\n'
+  printf 'Use ↑/↓ or j/k to move, Space to toggle, Enter to apply, q to cancel.\n\n'
+
+  for ((i = 0; i < ${#skill_names[@]}; i++)); do
+    name=${skill_names[$i]}
+    pointer=' '
+    (( i == cursor )) && pointer='›'
+    mark='□'
+    state='disabled'
+    if [[ "${selected_states[$i]}" == 1 ]]; then
+      mark=$'\033[38;2;233;118;88m■\033[0m'
+      state='enabled'
+    fi
+    printf '%s %s %-*s %s\n' "$pointer" "$mark" "$name_width" "$name" "$state"
+  done
+
+  printf '\nSelected skills will be enabled after apply.\n'
+}
+
+apply_selected_changes() {
+  local i name enabled_count disabled_count
+  local enabled_changed=()
+  local disabled_changed=()
+
+  for ((i = 0; i < ${#skill_names[@]}; i++)); do
+    name=${skill_names[$i]}
+    if [[ "${selected_states[$i]}" == 1 && "${original_states[$i]}" == 0 ]]; then
+      move_skill "$name" "$DISABLED_DIR" "$SKILLS_DIR"
+      enabled_changed+=("$name")
+    elif [[ "${selected_states[$i]}" == 0 && "${original_states[$i]}" == 1 ]]; then
+      move_skill "$name" "$SKILLS_DIR" "$DISABLED_DIR"
+      disabled_changed+=("$name")
+    fi
+  done
+
+  enabled_count=${#enabled_changed[@]}
+  disabled_count=${#disabled_changed[@]}
+  printf 'Applied changes: enabled %d, disabled %d\n' "$enabled_count" "$disabled_count"
+  if (( enabled_count > 0 )); then
+    printf 'Enabled: %s\n' "${enabled_changed[*]}"
+  fi
+  if (( disabled_count > 0 )); then
+    printf 'Disabled: %s\n' "${disabled_changed[*]}"
+  fi
+}
+
+interactive_select() {
+  [[ -t 0 && -t 1 ]] || fail 'select requires an interactive terminal'
+
+  load_skill_state
+  if [[ ${#skill_names[@]} -eq 0 ]]; then
+    printf 'No skills found\n'
+    return
+  fi
+
+  local cursor=0 key rest old_stty current
+  old_stty=$(stty -g)
+  cleanup_select() {
+    stty "$old_stty"
+    printf '\033[?25h\033[0m\n'
+  }
+  trap cleanup_select EXIT INT TERM
+  stty -echo -icanon time 0 min 1
+  printf '\033[?25l'
+
+  while true; do
+    render_select_screen "$cursor"
+    IFS= read -rsn1 key || key=''
+    case "$key" in
+      $'\x1b')
+        IFS= read -rsn2 rest || rest=''
+        case "$rest" in
+          '[A') (( cursor > 0 )) && cursor=$((cursor - 1)) ;;
+          '[B') (( cursor < ${#skill_names[@]} - 1 )) && cursor=$((cursor + 1)) ;;
+        esac
+        ;;
+      k)
+        (( cursor > 0 )) && cursor=$((cursor - 1))
+        ;;
+      j)
+        (( cursor < ${#skill_names[@]} - 1 )) && cursor=$((cursor + 1))
+        ;;
+      ' ')
+        if [[ "${selected_states[$cursor]}" == 1 ]]; then
+          selected_states[$cursor]=0
+        else
+          selected_states[$cursor]=1
+        fi
+        ;;
+      '')
+        cleanup_select
+        trap - EXIT INT TERM
+        apply_selected_changes
+        return
+        ;;
+      q)
+        cleanup_select
+        trap - EXIT INT TERM
+        printf 'No changes applied\n'
+        return
+        ;;
+    esac
+  done
+}
+
+command=${1:-}
+case "$command" in
+  list)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    print_section enabled "$SKILLS_DIR"
+    print_section disabled "$DISABLED_DIR"
+    ;;
+  select)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    interactive_select
+    ;;
+  enable)
+    [[ $# -eq 2 ]] || { usage >&2; exit 2; }
+    move_skill "$2" "$DISABLED_DIR" "$SKILLS_DIR"
+    printf 'Enabled %s\n' "$2"
+    ;;
+  disable)
+    [[ $# -eq 2 ]] || { usage >&2; exit 2; }
+    move_skill "$2" "$SKILLS_DIR" "$DISABLED_DIR"
+    printf 'Disabled %s\n' "$2"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
