@@ -108,7 +108,7 @@ render_select_screen() {
   local i name mark pointer state name_width
 
   name_width=38
-  printf '\033[H\033[2J'
+  printf '\033[H'
   printf 'Configure skill availability\n\n'
   printf 'Use ↑/↓ or j/k to move, Space to toggle, Enter to apply, q to cancel.\n\n'
 
@@ -172,7 +172,7 @@ interactive_select() {
   }
   trap cleanup_select EXIT INT TERM
   stty -echo -icanon time 0 min 1
-  printf '\033[?25l'
+  printf '\033[?25l\033[2J'
 
   while true; do
     render_select_screen "$cursor"
