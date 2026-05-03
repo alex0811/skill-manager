@@ -125,7 +125,7 @@ render_select_screen() {
     buf+=$(printf '%s %s %-*s %s' "$pointer" "$mark" "$name_width" "$name" "$state")$'\n'
   done
 
-  buf+=$'\n''Selected skills will be enabled after apply.'$'\n'
+  buf+=$'\n''Selected skills will be enabled after apply. Press q or Esc to cancel.'$'\n'
   printf '%s' "$buf"
 }
 
