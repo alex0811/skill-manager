@@ -2,6 +2,33 @@
 
 一个用于管理 Claude Code skill 启用状态的本地 Shell CLI。
 
+## 安装
+
+一行命令安装到 `~/.local/bin`（需要网络访问 GitHub）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/alex0811/skill-manager/main/skill-manager \
+  -o ~/.local/bin/skill-manager && chmod +x ~/.local/bin/skill-manager
+```
+
+安装完成后确认 `~/.local/bin` 在你的 `PATH` 中。如果不在，在 `~/.zshrc` 或 `~/.bashrc` 末尾加上：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+然后重载 shell：
+
+```bash
+source ~/.zshrc   # 或 source ~/.bashrc
+```
+
+验证安装：
+
+```bash
+skill-manager list
+```
+
 ## 目录约定
 
 - 启用中的 skill：`~/.claude/skills`
@@ -12,16 +39,16 @@
 ## 使用方法
 
 ```bash
-./skill-manager select
-./skill-manager list
-./skill-manager enable <skill-name>
-./skill-manager disable <skill-name>
+skill-manager select
+skill-manager list
+skill-manager enable <skill-name>
+skill-manager disable <skill-name>
 ```
 
 ## 交互式选择
 
 ```bash
-./skill-manager select
+skill-manager select
 ```
 
 交互界面需要在真实终端中运行，并会列出所有 skill：
@@ -59,7 +86,7 @@ Use ↑/↓ or j/k to move, Space to toggle, Enter to apply, q to cancel.
 ## 列出 skill
 
 ```bash
-./skill-manager list
+skill-manager list
 ```
 
 输出示例：
@@ -74,7 +101,7 @@ disabled:
 ## 启用 skill
 
 ```bash
-./skill-manager enable daily-review
+skill-manager enable daily-review
 ```
 
 这会把：
@@ -92,7 +119,7 @@ disabled:
 ## 禁用 skill
 
 ```bash
-./skill-manager disable daily-review
+skill-manager disable daily-review
 ```
 
 这会把：
