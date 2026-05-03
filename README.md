@@ -70,7 +70,7 @@ skill-manager select
 | `j` / `k` | 移动光标 |
 | Space | 切换选中/反选 |
 | Enter | 应用变更 |
-| `q` | 放弃并退出 |
+| `q` / Esc | 放弃并退出 |
 
 示意：
 
@@ -138,4 +138,10 @@ skill-manager disable daily-review
 
 ```bash
 bash test.sh
+```
+
+## 卸载
+
+```bash
+rm ~/.local/bin/skill-manager
 ```
