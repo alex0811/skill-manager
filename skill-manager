@@ -105,12 +105,12 @@ load_skill_state() {
 
 render_select_screen() {
   local cursor=$1
-  local i name mark pointer state name_width
+  local i name mark pointer state name_width buf
 
   name_width=38
-  printf '\033[H'
-  printf 'Configure skill availability\n\n'
-  printf 'Use ↑/↓ or j/k to move, Space to toggle, Enter to apply, q to cancel.\n\n'
+  buf=$'\033[H'
+  buf+='Configure skill availability'$'\n\n'
+  buf+='Use ↑/↓ or j/k to move, Space to toggle, Enter to apply, q to cancel.'$'\n\n'
 
   for ((i = 0; i < ${#skill_names[@]}; i++)); do
     name=${skill_names[$i]}
@@ -122,10 +122,11 @@ render_select_screen() {
       mark=$'\033[38;2;233;118;88m■\033[0m'
       state='enabled'
     fi
-    printf '%s %s %-*s %s\n' "$pointer" "$mark" "$name_width" "$name" "$state"
+    buf+=$(printf '%s %s %-*s %s' "$pointer" "$mark" "$name_width" "$name" "$state")$'\n'
   done
 
-  printf '\nSelected skills will be enabled after apply.\n'
+  buf+=$'\n''Selected skills will be enabled after apply.'$'\n'
+  printf '%s' "$buf"
 }
 
 apply_selected_changes() {
